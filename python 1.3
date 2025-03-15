@@ -1,0 +1,66 @@
+import subprocess
+import time
+from Quartz import *
+import Quartz
+from AppKit import NSWorkspace
+
+def get_active_app():
+    """Returns the name of the currently active application."""
+    return NSWorkspace.sharedWorkspace().frontmostApplication().localizedName()
+
+def press_key(key_code, key_name):
+    """Simulate pressing a key using Quartz."""
+    key_down = CGEventCreateKeyboardEvent(None, key_code, True)
+    CGEventPost(kCGHIDEventTap, key_down)
+
+    time.sleep(0.05)  # Small delay to simulate a real key press
+
+    key_up = CGEventCreateKeyboardEvent(None, key_code, False)
+    CGEventPost(kCGHIDEventTap, key_up)
+
+    print(f"✅ Simulated key press: {key_name}")
+
+def callback(proxy, event_type, event, refcon):
+    if event_type == kCGEventOtherMouseDown:
+        active_app = get_active_app()
+        
+        if active_app != "Adobe Photoshop 2022":
+            return event  # Ignore input if Photoshop is not active
+
+        button_id = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGMouseEventButtonNumber)
+        print(f"🖱 Mouse Button Pressed in Photoshop: {button_id}")
+
+        if button_id == 2:
+            print("🟢 Middle Mouse Button Clicked! Mapping to F7...")
+            press_key(98, "F7")  # F7
+        elif button_id == 3:
+            print("🔵 Button 3 Clicked! Mapping to F8...")
+            press_key(100, "F8")  # F8
+        elif button_id == 4:
+            print("🟣 Button 4 Clicked! Mapping to F10...")
+            press_key(109, "F10")  # F10
+        else:
+            return event  # Let other buttons function normally
+
+        return None  # Suppress default behavior to avoid double input
+
+    return event  # Allow normal event processing for non-matching events
+
+# Create an event tap to intercept mouse clicks
+tap = CGEventTapCreate(
+    kCGHIDEventTap,
+    kCGHeadInsertEventTap,
+    kCGEventTapOptionDefault,  # Allows suppression of default actions
+    1 << kCGEventOtherMouseDown,
+    callback,
+    None
+)
+
+if tap:
+    run_loop_source = CFMachPortCreateRunLoopSource(None, tap, 0)
+    CFRunLoopAddSource(CFRunLoopGetCurrent(), run_loop_source, kCFRunLoopDefaultMode)
+    print("✅ Listening for mouse button clicks... (Works only in Photoshop)")
+    CGEventTapEnable(tap, True)
+    CFRunLoopRun()
+else:
+    print("❌ Failed to create event tap. Check Accessibility permissions!")
