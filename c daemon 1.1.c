@@ -1,70 +1,65 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreFoundation/CoreFoundation.h>
-#include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <stdio.h>
 
-#define TARGET_APP "Adobe Photoshop"
+// Function to get the active application's name
+char* get_active_app() {
+    ProcessSerialNumber psn;
+    CFStringRef appName;
+    GetFrontProcess(&psn);
+    CopyProcessName(&psn, &appName);
+    static char appNameCStr[256];
+    CFStringGetCString(appName, appNameCStr, sizeof(appNameCStr), kCFStringEncodingUTF8);
+    CFRelease(appName);
+    return appNameCStr;
+}
 
-void pressKey(CGKeyCode keyCode) {
-    CGEventRef keyDown = CGEventCreateKeyboardEvent(NULL, keyCode, true);
+// Function to simulate a key press
+void press_key(CGKeyCode key) {
+    CGEventRef keyDown = CGEventCreateKeyboardEvent(NULL, key, true);
+    CGEventRef keyUp = CGEventCreateKeyboardEvent(NULL, key, false);
     CGEventPost(kCGHIDEventTap, keyDown);
-    CFRelease(keyDown);
-    
-    CGEventRef keyUp = CGEventCreateKeyboardEvent(NULL, keyCode, false);
     CGEventPost(kCGHIDEventTap, keyUp);
+    CFRelease(keyDown);
     CFRelease(keyUp);
 }
 
-bool isPhotoshopActive() {
-    CFArrayRef windowList = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
-    CFIndex count = CFArrayGetCount(windowList);
-    bool result = false;
-    
-    for (CFIndex i = 0; i < count; i++) {
-        CFDictionaryRef windowInfo = CFArrayGetValueAtIndex(windowList, i);
-        CFStringRef ownerName = CFDictionaryGetValue(windowInfo, kCGWindowOwnerName);
-        
-        if (ownerName && CFStringCompare(ownerName, CFSTR(TARGET_APP), 0) == kCFCompareEqualTo) {
-            result = true;
-            break;
+// Callback function to intercept mouse clicks
+CGEventRef callback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void *refcon) {
+    if (type == kCGEventOtherMouseDown) {
+        int button = CGEventGetIntegerValueField(event, kCGMouseEventButtonNumber);
+        if (strcmp(get_active_app(), "Adobe Photoshop 2022") == 0) { // Check if Photoshop is active
+            switch (button) {
+                case 2:
+                    press_key(98);  // F7
+                    return NULL;
+                case 3:
+                    press_key(100); // F8
+                    return NULL;
+                case 4:
+                    press_key(109); // F10
+                    return NULL;
+            }
         }
     }
-    
-    CFRelease(windowList);
-    return result;
-}
-
-CGEventRef callback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void *refcon) {
-    if (type != kCGEventOtherMouseDown) return event;
-    
-    if (!isPhotoshopActive()) return event;
-    
-    int button = CGEventGetIntegerValueField(event, kCGMouseEventButtonNumber);
-    printf("Mouse Button Pressed: %d\n", button);
-    
-    switch (button) {
-        case 2: pressKey(98);  break; // F7
-        case 3: pressKey(100); break; // F8
-        case 4: pressKey(109); break; // F10
-        default: return event;
-    }
-    
-    return NULL; // Suppress event to prevent double input
+    return event;
 }
 
 int main() {
-    CFMachPortRef tap = CGEventTapCreate(kCGHIDEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault, 1 << kCGEventOtherMouseDown, callback, NULL);
-    if (!tap) {
-        printf("Failed to create event tap! Check permissions.\n");
+    CGEventMask mask = (1 << kCGEventOtherMouseDown);
+    CFMachPortRef eventTap = CGEventTapCreate(kCGHIDEventTap, kCGHeadInsertEventTap, 0, mask, callback, NULL);
+    if (!eventTap) {
+        fprintf(stderr, "Failed to create event tap. Check permissions!\n");
         return 1;
     }
     
-    CFRunLoopSourceRef runLoopSource = CFMachPortCreateRunLoopSource(NULL, tap, 0);
-    CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, kCFRunLoopDefaultMode);
-    CGEventTapEnable(tap, true);
-    
-    printf("Daemon running: remapping mouse clicks in Photoshop.\n");
+    CFRunLoopSourceRef runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0);
+    CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, kCFRunLoopCommonModes);
+    CGEventTapEnable(eventTap, true);
+    printf("✅ Listening for mouse clicks in Adobe Photoshop 2022...\n");
     CFRunLoopRun();
-    
     return 0;
 }
