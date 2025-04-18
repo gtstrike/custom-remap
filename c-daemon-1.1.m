@@ -17,6 +17,15 @@ void press_key(CGKeyCode key_code) {
     CFRelease(keyUp);
 }
 
+// Function to check if photoshop is active
+bool is_photoshop_active() {
+    NSRunningApplication *frontmostApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
+    if (!frontmostApp) return false;
+
+    NSString *appNameStr = [frontmostApp localizedName];
+    return [appNameStr isEqualToString:@"Adobe Photoshop 2022"];
+}
+
 // Function to check if Chrome is active
 bool is_chrome_active() {
     NSRunningApplication *frontmostApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
@@ -29,7 +38,7 @@ bool is_chrome_active() {
 
 // Mouse button callback
 CGEventRef mouse_callback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void *refcon) {
-    if (type == kCGEventOtherMouseDown) {
+    if (type == kCGEventOtherMouseDown && is_photoshop_active()) {
         int button_id = (int)CGEventGetIntegerValueField(event, kCGMouseEventButtonNumber);
         printf("Mouse Button ID: %d\n", button_id);
         fflush(stdout);
